@@ -5,7 +5,7 @@ fn main() {
 }
 
 fn largest() -> (i32, i32) {
-    let s = include_str!("../../input/01");
+    let s = include_str!("../../../input/01");
     let mut maxes = vec![];
     let mut count = 0;
 
