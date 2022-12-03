@@ -5,30 +5,24 @@ fn main() {
 }
 
 fn cval(c: char) -> usize {
-    let mut x: u32 = c.into();
-    x -= if c > 'a' { 96 } else { 65 - 27 };
-    (x).try_into().unwrap()
+    let x = c as usize;
+    if c > 'a' { x - 96 } else { x - (65 - 27) }
 }
 
 fn duplicates(s: &str) -> usize {
     let mut ps = 0;
     for line in s.lines() {
         let (left, right) = line.split_at(line.len() / 2);
-        for c in left.chars() {
-            if right.contains(c) {
-                ps += cval(c);
-                break
-            }
-        }
+        ps += cval( left.chars().find(|&c| right.contains(c)).unwrap() );
     }
     ps
 }
 
 fn badges(s: &str) -> usize {
     let mut ps = 0;
-    let ls: Vec<_> = s.lines().collect();
-    for i in (0..ls.len()).step_by(3) {
-        ps += ls[i].chars().find(|&c| ls[i + 1].contains(c) && ls[i + 2].contains(c))
+    let lines: Vec<_> = s.lines().collect();
+    for ls in lines.chunks(3) {
+        ps += ls[0].chars().find(|&c| ls[1].contains(c) && ls[2].contains(c))
             .map(|c| cval(c))
             .unwrap_or(0);
     }
