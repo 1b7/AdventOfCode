@@ -4,7 +4,7 @@ fn main() {
     let input = include_str!("../../../input/04");
     let (p1, p2) = intersections(input);
     println!("Part 1: {}", p1);
-    println!("Part 1: {}", p2);
+    println!("Part 2: {}", p2);
 }
 
 fn intersections(s: &str) -> (usize, usize) {
