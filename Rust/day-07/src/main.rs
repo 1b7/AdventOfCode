@@ -14,7 +14,6 @@ fn cd(i: &str, cur:&mut Vec<String>) {
 }
 
 fn size(from: &str, dirs: &HashMap<String, HashSet<(&str, usize)>>, counted: &mut HashSet<String>) -> usize {
-    // if dirs.get(from).is_none() { return 0 }    
     let mut s = 0;
     for &(f, size) in dirs.get(from).unwrap() { 
         let mut new_s = from.to_owned(); new_s.push_str(f);
@@ -47,21 +46,9 @@ fn navigate(s: &str) -> (usize, usize) {
                 "cd" => cd(splits[2], &mut dir),
                 _ => panic!()
             };
-        } else if line.starts_with("dir") {
-            let current = dir.join("/");
-            let mut tmp = current.to_owned();
-            let (_, dir_name) = line.split_once(' ').unwrap();
-            if tmp != "" {
-                tmp.push('/');
-            }
-            tmp.push_str(dir_name);
-            if !dirs.contains_key(&tmp) {
-                dirs.insert(tmp.clone(), HashSet::new());
-            }
-            continue;
-        } else { // is file
+        } else if !line.starts_with("dir") { // is file
             let (size, name) =  line.split_once(" ").unwrap();
-            let size: usize = size.parse().unwrap();
+            let size = size.parse().unwrap();
             let current = dir.join("/");
 
             if !dirs.contains_key(&current) {
@@ -73,14 +60,13 @@ fn navigate(s: &str) -> (usize, usize) {
     }
     
     let sizes: Vec<_> = dirs.keys()
-    .map(|k| {
-        let mut set = HashSet::new();
-        (k, size(k, &dirs, &mut set))
-    }).collect();
+    .map(|k| 
+        size(k, &dirs, &mut HashSet::new())
+    ).collect();
 
-    let free_space = 70_000_000 - sizes.iter().map(|(_, b)| b).max().unwrap();
+    let free_space = 70_000_000 - sizes.iter().max().unwrap();
     let delta = 30_000_000  - free_space;
 
-    (sizes.iter().map(|&(_, b)| b).filter(|&n| n <= 100_000).sum(),
-        sizes.iter().map(|&(_, b)| b).filter(|&n| n >= delta).min().unwrap())
+    (sizes.iter().filter(|&&n| n <= 100_000).sum(),
+        *sizes.iter().filter(|&&n| n >= delta).min().unwrap())
 }
