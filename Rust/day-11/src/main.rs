@@ -1,22 +1,29 @@
 fn main() {
     let input = include_str!("../../../input/11");
-    println!("Part 1: {:?}", p1(input));
-    println!("Part 2: {:?}", p2(input));
+    let (p1, p2) = run(input);
+    println!("Part 1: {:?}", p1);
+    println!("Part 2: {:?}", p2);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Operator { Mul, Add }
-#[derive(Debug)]
+
+#[derive(Debug, Clone, Copy)]
 enum Operand {Int(usize), Old}
 
-#[derive(Debug)]
-struct Operation {
-    left: Operand,
-    right: Operand,
-    op: Operator
+#[derive(Debug, Clone, Copy)]
+struct Operation { left: Operand, right: Operand, op: Operator }
+impl Operation {
+    pub fn operate(&self, old: usize) -> usize {
+        let unbox = |o| match o { Operand::Old =>  old, Operand::Int(x) => x };
+        match self.op {
+            Operator::Mul => unbox(self.left) * unbox(self.right),
+            Operator::Add => unbox(self.left) + unbox(self.right)
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Monkey {
     items: Vec<usize>,
     operation: Operation,
@@ -30,24 +37,10 @@ impl Monkey {
         let mut out = vec![];
 
         while item.is_some() {
-            let item_int = item.unwrap();
-            let left = match &self.operation.left {
-                Operand::Int(x) => *x,
-                _ => item_int
-            };
-            let right = match &self.operation.right {
-                Operand::Int(x) => *x,
-                _ => item_int
-            };
-            let mut result = match self.operation.op {
-                Operator::Add => left + right,
-                _ => left * right
-            };
-
-            
+            let mut result = self.operation.operate(item.unwrap());
             result = if p == 0 { result / 3 } else { result %  p };
+            
             let throw_to = if result % self.test.0 == 0 { self.test.1 } else { self.test.2 };
-
             out.push((result, throw_to));
             self.inspections += 1;
             item = self.items.pop();
@@ -65,9 +58,8 @@ fn str_as_monkey(txt: &str) -> Monkey {
     let op = fields[2].split_once("= ").unwrap().1;
     let ops: Vec<_> = op.split(' ').collect();
     let (left, mid, right) = (ops[0], ops[1], ops[2]);
-    // println!("{} {} {}", left, mid, right);
-    let left = left.parse().map_or_else(|_| Operand::Old, |x| Operand::Int(x));
-    let right = right.parse().map_or_else(|_| Operand::Old, |x| Operand::Int(x));
+    let left = left.parse().map_or_else(|_| Operand::Old, Operand::Int);
+    let right = right.parse().map_or_else(|_| Operand::Old, Operand::Int);
     let mid = match mid {
         "*" => Operator::Mul,
         _ => Operator::Add
@@ -83,12 +75,13 @@ fn str_as_monkey(txt: &str) -> Monkey {
     }
 }
 
-fn p1(input: &str) -> usize {
-    let monkeys = input.split("\n\n");
-    let mut monkeys: Vec<_> = monkeys.map(str_as_monkey).collect();
+fn run(input: &str) -> (usize, usize) {
+    let mut monkeys: Vec<_> = input.split("\n\n").map(str_as_monkey).collect();
+    (p1(&mut monkeys.clone()), p2(&mut monkeys))
+}
 
+fn p1(monkeys: &mut [Monkey]) -> usize {
     for _ in 0..20 {
-        // println!("{:#?}", monkeys);
         for i in 0..monkeys.len() {
             let out = monkeys[i].inspect(0);
             for (x, n) in out {
@@ -101,13 +94,9 @@ fn p1(input: &str) -> usize {
     ins[0..2].iter().product()
 }
 
-fn p2(input: &str) -> usize {
-    let monkeys = input.split("\n\n");
-    let mut monkeys: Vec<_> = monkeys.map(str_as_monkey).collect();
-
+fn p2(monkeys: &mut [Monkey]) -> usize {
     let p = monkeys.iter().map(|m| m.test.0).product();
-
-    for r in 0..10_000 {
+    for _ in 0..10_000 {
         for i in 0..monkeys.len() {
             let out = monkeys[i].inspect(p);
             for (x, n) in out {
