@@ -43,8 +43,8 @@ fn p2(input: &str) -> usize {
     cubes.iter().for_each(|cube|
         (lx, ly, lz) = (lx.max(cube.x), ly.max(cube.y), lz.max(cube.z))
     );
-    let end = Cube::new(lx + 2, ly + 2, lz + 2);
-    flood(Cube::new(-2, -2, -2), &cubes, &mut HashSet::new(), end)
+    let end = Cube::new(lx + 1, ly + 1, lz + 1);
+    flood(Cube::new(-1, -1, -1), &cubes, &mut HashSet::new(), end)
 }
 
 fn flood(s: Cube, map: &HashSet<Cube>, visited: &mut HashSet<Cube>, end: Cube) -> usize {
