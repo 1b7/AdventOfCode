@@ -93,8 +93,18 @@ impl Traveller {
 fn travel(graph: &HashMap<&'static str, (usize, Vec<(&'static str, u8)>)>, actors: usize, time: u8) -> usize {
     let template = Traveller::new("AA", State::Free);
     let travellers = vec![template; actors];
-    let all_valves: HashSet<_> = HashSet::from_iter(graph.keys().filter(|&&s| s == "AA").map(|&s| s));
+    let all_valves: HashSet<_> = HashSet::from_iter(graph.keys().filter(|&&s| s != "AA").map(|&s| s));
     let mut pressure_max = 0;
+
+    let mut indexes: Vec<_> = all_valves.iter().map(|&s| s).collect();
+    indexes.sort();
+
+    let to_index = |valve: &&'static str| -> u16 {
+        2u16.pow(indexes.binary_search(valve).unwrap() as u32)
+    };
+
+    // let mut seen_combinations = vec![];
+    let mut seen_combinations = HashSet::new();
     
     let mut states: VecDeque<_> = VecDeque::new();
     states.push_back((travellers, HashSet::<&'static str>::new(), time, 0u16));
@@ -129,6 +139,11 @@ fn travel(graph: &HashMap<&'static str, (usize, Vec<(&'static str, u8)>)>, actor
             continue;
         }
 
+        // Store seen combinations of opened valves in a bit-vector; we can then
+        // compare against these orders and avoid repeating them.
+        let bitvec_valves = opened_valves.iter().fold(0, |acc, s| acc | to_index(s));
+        seen_combinations.insert(bitvec_valves);
+
         let mut outgoing_travellers: Vec<Vec<Traveller>> = vec![vec![]; 2];
         // 'Act' for each traveller:
         for (n, traveller) in travellers.iter().enumerate() {
@@ -150,9 +165,12 @@ fn travel(graph: &HashMap<&'static str, (usize, Vec<(&'static str, u8)>)>, actor
                         let (_, options) = graph.get(traveller.node).unwrap();
 
                         // Only consider travelling to unopened valves:
-                        let options = options.into_iter().filter(|(node, dist)| 
-                            !opened_valves.contains(*node) && *dist <= time_left
-                        );
+                        let options = options.into_iter().filter(|(node, dist)| {
+                            let bitvec_new = bitvec_valves | to_index(node);
+                            !opened_valves.contains(*node) 
+                                && *dist <= time_left
+                                && !seen_combinations.contains(&bitvec_new)
+                        });
 
                         // Create new state, pass it forward:
                         for option in options {
