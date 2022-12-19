@@ -5,29 +5,39 @@ use std::time::Instant;
 fn main() {
     let input = include_str!("../../../input/19");
     let s = Instant::now();
-    let p1 = p1(input);
+    // let p1 = p1(input);
+    let p2 = p2(input);
     let e = s.elapsed();
-    println!("Part 1: {}", p1);
+    // println!("Part 1: {}", p1);
+    println!("Part 2: {}", p2);
     println!("Took: {}", e.as_millis());
 }
 
 
 fn p1(input: &str) -> usize {
     let factories: Vec<_> = input.lines().map(|s| Factory::from_str(s).unwrap()).collect();
-    // let results = run(factories[1]);
     let mut sum = 0;
     let t = Instant::now();
     for (i, &factory) in factories.iter().enumerate() {
         println!("{}/{} Complete\t[{:.4}s]", i, factories.len(), t.elapsed().as_secs_f32());
-        sum += run(factory);
+        sum += run(factory, 24).0;
     }
     println!("All Complete\t[{:.4}s]", t.elapsed().as_secs_f32());
-    // let results: Vec<_> = factories.into_iter().map(run).collect();
-    // dbg!(&results);
-    // results.into_iter().sum()
-    // results
     sum
 }
+
+fn p2(input: &str) -> usize {
+    let factories: Vec<_> = input.lines().take(3).map(|s| Factory::from_str(s).unwrap()).collect();
+    let mut sum = 1;
+    let t = Instant::now();
+    for (i, &factory) in factories.iter().enumerate() {
+        println!("{}/{} Complete\t[{:.4}s]", i, factories.len(), t.elapsed().as_secs_f32());
+        sum *= run(factory, 32).1;
+    }
+    println!("All Complete\t[{:.4}s]", t.elapsed().as_secs_f32());
+    sum
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Mat { Ore, Clay, Obsidian, Geode }
@@ -39,7 +49,6 @@ struct Factory {
     mats: [usize; 4],
     bots: [usize; 4],
     building: Option<u8>
-    // Format: [ORE, CLAY, OBSIDIAN, GEODE]
 }
 
 impl Factory {
@@ -49,27 +58,23 @@ impl Factory {
 
     pub fn build_ore(&mut self) {
         self.mats[Mat::Ore as usize] -= self.costs[Mat::Ore as usize].0 as usize;
-        // self.bots[Mat::Ore as usize] += 1;
         self.building = Some(Mat::Ore as u8);
     }
 
     pub fn build_clay(&mut self) {
         self.mats[Mat::Ore as usize] -= self.costs[Mat::Clay as usize].0 as usize;
-        // self.bots[Mat::Clay as usize] += 1;
         self.building = Some(Mat::Clay as u8);
     }
 
     pub fn build_obsidian(&mut self) {
         self.mats[Mat::Ore as usize] -= self.costs[Mat::Obsidian as usize].0 as usize;
         self.mats[Mat::Clay as usize] -= self.costs[Mat::Obsidian as usize].1 as usize;
-        // self.bots[Mat::Obsidian as usize] += 1;
         self.building = Some(Mat::Obsidian as u8);
     }
 
     pub fn build_geode(&mut self) {
         self.mats[Mat::Ore as usize] -= self.costs[Mat::Geode as usize].0 as usize;
         self.mats[Mat::Obsidian as usize] -= self.costs[Mat::Geode as usize].1 as usize;
-        // self.bots[Mat::Geode as usize] += 1;
         self.building = Some(Mat::Geode as u8);
     }
 
@@ -115,9 +120,7 @@ impl FromStr for Factory {
                 .parse().unwrap_or(0);
             costs[i] = (l, r);
         }
-
         Ok(Factory::new(id, costs))
-
     }
     type Err = Error;
 }
@@ -126,67 +129,69 @@ fn sum_up(n: usize) -> Vec<usize> {
     (0..=n).scan(0usize, |acc, x| { *acc += x; Some(*acc) }).collect()
 }
 
-fn run(factory: Factory) -> usize {
+
+fn run(factory: Factory, max_time: usize) -> (usize, usize) {
     let mut max_quality = 0;
     let mut max_geodes = 0;
     let mut fs = VecDeque::new();
-    fs.push_back((factory, vec![], 24));
+    // fs.push_back((factory, vec![], max_time));
+    fs.push_back((factory, max_time));
 
-    let mut memo = HashSet::new();
-
-    let max_possible_additions = sum_up(24);
+    let max_possible_additions = sum_up(max_time);
 
     while !fs.is_empty() {
-        let (mut f, f_order, time) = fs.pop_front().unwrap();
+        let (mut f, time) = fs.pop_front().unwrap();
         let time = time - 1;
         f.harvest();
 
         if f.quality() > max_quality {
-            max_geodes = f.mats[Mat::Geode as usize];
+            max_geodes = max_geodes.max(f.mats[Mat::Geode as usize]);
             max_quality = max_quality.max(f.quality());
-            // println!("{:?}", f_order);
-            // dbg!(f.id, f.mats[Mat::Geode as usize], time);
         }
         if time == 0 { continue; }
 
+
         // Decision Tree Pruning:
-        if f_order.len() > 8 && memo.contains(&f_order.clone())  { 
-            continue; 
-        }
-        memo.insert(f_order.clone());
+        if f.quality() < (max_quality as f32 * 0.75) as usize {  continue;  }
 
-        if f.quality() < max_quality {
-            continue; 
-        }
+        if f.mats[Mat::Geode as usize] < max_geodes.saturating_sub(2) { continue; }
+        if f.bots[Mat::Geode as usize] > 0 && time > max_time / 2 { continue; }
+        if f.mats[Mat::Geode as usize] + max_possible_additions[time] <= max_geodes { continue; }
 
-        if f.mats[Mat::Geode as usize] + max_possible_additions[time] <= max_geodes {
-            continue;
-        }
+        if  f.mats[Mat::Ore as usize] >= f.costs[Mat::Geode as usize].0 as usize 
+            && f.mats[Mat::Obsidian as usize] >= f.costs[Mat::Geode as usize].1 as usize 
+        {
+            let mut nf = f;
+            nf.build_robot(Mat::Geode);
+            fs.push_back((nf, time));
+        } else {
+            let max_ore = f.costs.iter().map(|c| c.0).max().unwrap() as usize + 1;
+            let max_clay = f.costs[2].1 as usize + 1;
+            let max_obs = f.costs[3].1 as usize + 1;
 
-        for m in [Mat::Geode, Mat::Obsidian, Mat::Clay, Mat::Ore] {
-            let (cost_a, cost_b) = f.costs[m as usize];
-
-            let affordable = match m {
-                Mat::Ore =>      f.mats[Mat::Ore as usize] >= cost_a as usize,
-                Mat::Clay =>     f.mats[Mat::Ore as usize] >= cost_a as usize,
-                Mat::Obsidian => f.mats[Mat::Ore as usize] >= cost_a as usize
-                                 && f.mats[Mat::Clay as usize] >= cost_b as usize,
-                Mat::Geode =>    f.mats[Mat::Ore as usize] >= cost_a as usize 
-                                 && f.mats[Mat::Obsidian as usize] >= cost_b as usize,
-            };
-
-            if affordable {
-                let mut nf = f;
-                nf.build_robot(m);
-
-                let mut order = f_order.clone();
-                order.push(m as u8);
-
-                fs.push_back((nf, order, time));
+            for m in [Mat::Obsidian, Mat::Clay, Mat::Ore] {
+                let (cost_a, cost_b) = f.costs[m as usize];
+    
+                let affordable = match m {
+                    Mat::Ore =>      f.mats[Mat::Ore as usize] <= max_ore 
+                                     && f.mats[Mat::Ore as usize] >= cost_a as usize,
+                    Mat::Clay =>     f.mats[Mat::Ore as usize] >= cost_a as usize
+                                     && f.mats[Mat::Clay as usize] <= max_clay,
+                    Mat::Obsidian => f.mats[Mat::Ore as usize] >= cost_a as usize
+                                     && f.mats[Mat::Clay as usize] >= cost_b as usize
+                                     && f.mats[Mat::Obsidian as usize] <= max_obs,
+                    Mat::Geode =>    f.mats[Mat::Ore as usize] >= cost_a as usize 
+                                     && f.mats[Mat::Obsidian as usize] >= cost_b as usize,
+                };
+                if affordable {
+                    let mut nf = f;
+                    nf.build_robot(m);
+                    fs.push_back((nf, time));
+                }
             }
+            fs.push_back((f, time));
         }
-        fs.push_back((f, f_order.clone(), time));
     }
-    dbg!(max_quality);
-    max_quality
+    dbg!(max_quality, max_geodes);
+    (max_quality, max_geodes)
 }
