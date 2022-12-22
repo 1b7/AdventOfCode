@@ -4,17 +4,12 @@ fn main() {
     let input = include_str!("../../../input/22");
     let s = Instant::now();
 
-    assert_eq!(Facing::East as usize, 0);
-    assert_eq!(Facing::South as usize, 1);
-    assert_eq!(Facing::West as usize, 2);
-    assert_eq!(Facing::North as usize, 3);
-    
-    let p1 = p1(input);
-    // let p2 = p2(input);
+    // let p1 = p1(input);
+    let p2 = p2(input);
 
     let e = s.elapsed();
-    println!("Part 1: {}", p1);
-    // println!("Part 2: {}", p2);
+    // println!("Part 1: {}", p1);
+    println!("Part 2: {}", p2);
     println!("Took: {}ms", e.as_millis());
 }
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
@@ -156,7 +151,7 @@ impl Position {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Instruction { TurnLeft, TurnRight, Forward(usize) }
+enum Instruction { TurnLeft, TurnRight, Forward }
 
 fn parse_password(pwd: &str) -> Vec<Instruction> {
     let mut ins = vec![];
@@ -164,17 +159,17 @@ fn parse_password(pwd: &str) -> Vec<Instruction> {
     while chrs.peek().is_some() {
         let next = chrs.peek().unwrap();
         let instr = match next {
-            'L' => { chrs.next(); Instruction::TurnLeft },
-            'R' => { chrs.next(); Instruction::TurnRight },
+            'L' => { chrs.next(); ins.push(Instruction::TurnLeft); },
+            'R' => { chrs.next(); ins.push(Instruction::TurnRight); },
             _ => {
                 let mut nums = String::new();
                 while chrs.peek().is_some() && chrs.peek().unwrap().is_numeric() {
                     nums.push(chrs.next().unwrap());
                 }
-                Instruction::Forward(nums.parse().unwrap())
+                let n = nums.parse().unwrap();
+                for _ in 0..n { ins.push(Instruction::Forward); }
             }
         };
-        ins.push(instr);
     }
     ins
 }
@@ -189,7 +184,7 @@ fn p1(input: &str) -> usize {
 
     for instruction in &instructions {
         match instruction {
-            Instruction::Forward(n) => pos.step(*n, map),
+            Instruction::Forward => pos.step(1, map),
             Instruction::TurnLeft => pos.f.turn_anticlockwise(),
             Instruction::TurnRight => pos.f.turn_clockwise()
         }
@@ -198,6 +193,115 @@ fn p1(input: &str) -> usize {
     (1000 * (pos.y + 1)) + (4 * (pos.x + 1)) + pos.f as usize
 }
 
-fn p2(input: &str) -> usize {
-    todo!()
+fn move_face(idx: u8, facing: Facing, y: usize, x: usize) -> (u8, (usize, usize), Facing) {
+
+    match idx {
+        0 => match facing {
+            Facing::East  => (1, (y, 0), Facing::East),
+            Facing::South => (2, (0, x), Facing::South),
+            Facing::West  => (3, (LENGTH - y, 0), Facing::East),
+            Facing::North => (5, (x, 0), Facing::East)
+        },
+
+        1 => match facing {
+            Facing::West =>  (0, (y, LENGTH - 1), Facing::East),
+            Facing::South => (2, (x, LENGTH - 1), Facing::West),
+            Facing::East  => (4, (LENGTH - y, LENGTH), Facing::West),
+            Facing::North => (5, (LENGTH, x), Facing::South)
+        },
+
+        2 => match facing {
+            Facing::North => (0, (LENGTH - 1, x), Facing::North),
+            Facing::East  => (1, (LENGTH - 1, y), Facing::North),
+            Facing::South => (4, (0, x), Facing::South),
+            Facing::West  => (3, (0, y), Facing::South)
+        },
+
+        3 => match facing {
+            Facing::East  => (4, (y, 0), Facing::East),
+            Facing::South => (5, (0, x), Facing::South),
+            Facing::North => (2, (x, 0), Facing::East),
+            Facing::West  => (0, (LENGTH - y, 0), Facing::East)
+        },
+
+        4 => match facing {
+            Facing::North => (2, (LENGTH - 1, x), Facing::North),
+            Facing::West  => (3, (y, LENGTH - 1), Facing::West),
+            Facing::South => (5, (x, LENGTH - 1), Facing::West),
+            Facing::East  => (1, (LENGTH - y, LENGTH - 1), Facing::West)
+        },
+
+        5 => match facing {
+            Facing::North => (3, (LENGTH - 1, x), Facing::North),
+            Facing::East  => (4 ,(LENGTH - 1, y), Facing::North),
+            Facing::South => (1, (0, x), Facing::South),
+            Facing::West  => (0, (0, LENGTH - x), Facing::South),
+        },
+        _ => panic!()
+    }
 }
+
+const LENGTH: usize = 50;
+
+fn p2(input: &str) -> usize {
+    let mut faces = vec![];
+    let (map_str, password) = input.split_once("\n\n").unwrap();
+    let map = &parse_map(map_str);
+
+    let (dim, (iy, ix)) = (0, get_first_open(map));
+    let pos = Position { y: iy, x: ix, f:  Facing::East };
+    let mut pos = (dim, pos);
+    let instructions = parse_password(password);
+
+    let mut starts: Vec<(usize, usize)> = vec![];
+    for y in (0..(LENGTH * 3)).step_by(LENGTH) {
+        for x in (0..(LENGTH * 3)).step_by(LENGTH) {
+            if map[y][x] != Tile::Void {
+                let mut new_face = vec![];
+                for dy in y..(y + LENGTH) {
+                    let mut new_row = vec![];
+                    for dx in x..(x + LENGTH) {
+                        new_row.push(map[dy][dx])
+                    }
+                    starts.push((y, x));
+                    new_face.push(new_row);
+                }
+                faces.push(new_face);
+            }
+        }
+    }
+
+    for instruction in instructions {
+        match instruction {
+            Instruction::TurnLeft => pos.1.f.turn_anticlockwise(),
+            Instruction::TurnRight => pos.1.f.turn_clockwise(),
+            Instruction::Forward => {
+                let move_fn = match pos.1.f {
+                    Facing::North => Position::up,
+                    Facing::East => Position::right,
+                    Facing::South => Position::down,
+                    Facing::West => Position::left
+                };
+
+                let try_move = move_fn(&pos.1, LENGTH, LENGTH);
+                if let Some(new_pos) = try_move {
+                    pos.1.y = new_pos.0;
+                    pos.1.x = new_pos.1;
+                } else {
+                    let (nd, (ny, nx), nf) = move_face(pos.0, pos.1.f, pos.1.y, pos.1.x);
+                    pos = (nd, Position { x: nx, y: ny, f: nf });
+                }
+
+            }
+        }
+    }
+
+    dbg!(pos);
+
+    let final_x = pos.1.x + starts[pos.0 as usize].1;
+    let final_y = pos.1.y + starts[pos.0 as usize].0;
+
+
+    (1000 * (final_y + 1)) + (4 * (final_x + 1)) + pos.1.f as usize
+}
+// 32275 too low
