@@ -4,13 +4,13 @@ fn main() {
     let input = include_str!("../../../input/22");
     let s = Instant::now();
 
-    // let p1 = p1(input);
+    let p1 = p1(input);
     let p2 = p2(input);
 
     let e = s.elapsed();
-    // println!("Part 1: {}", p1);
+    println!("Part 1: {}", p1);
     println!("Part 2: {}", p2);
-    println!("Took: {}ms", e.as_millis());
+    println!("Took: {}μs", e.as_micros());
 }
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 enum Facing { East, South, West, North }
@@ -42,7 +42,7 @@ impl Tile {
             ' ' => Tile::Void,
             '#' => Tile::Wall,
             '.' => Tile::Open,
-            _   => panic!()
+            _   => panic!("Invalid Character passed in")
         }
     }
 }
@@ -59,19 +59,16 @@ fn parse_map(s: &str) -> Vec<Vec<Tile>> {
             row.push(Tile::Void)
         }
     }
-
     map
 }
 
 fn get_first_open(map: &Vec<Vec<Tile>>) -> (usize, usize) {
     for (r, row) in map.iter().enumerate() {
         for (c, col) in row.iter().enumerate() {
-            if *col == Tile::Open { 
-                return (r, c)
-            }
+            if *col == Tile::Open { return (r, c) }
         }
     }
-    panic!("Not found");
+    panic!("Starting Point Not found");
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -133,17 +130,13 @@ impl Position {
                     Tile::Void => {
                         if let Some(new_pos) = wrap(*self, row, col, height, width, map) {
                             *self = new_pos;
-                        } else {
-                            return
-                        }
+                        } else { return }
                     }
                 }
             } else {
                if let Some(new_pos) = wrap(*self, self.y, self.x, height, width, map) {
                 *self = new_pos
-               } else {
-                    return
-               }
+               } else { return }
             }
         }
 
@@ -157,8 +150,7 @@ fn parse_password(pwd: &str) -> Vec<Instruction> {
     let mut ins = vec![];
     let chrs = &mut pwd.chars().peekable();
     while chrs.peek().is_some() {
-        let next = chrs.peek().unwrap();
-        let instr = match next {
+        match chrs.peek().unwrap() {
             'L' => { chrs.next(); ins.push(Instruction::TurnLeft); },
             'R' => { chrs.next(); ins.push(Instruction::TurnRight); },
             _ => {
@@ -189,25 +181,25 @@ fn p1(input: &str) -> usize {
             Instruction::TurnRight => pos.f.turn_clockwise()
         }
     }
-
     (1000 * (pos.y + 1)) + (4 * (pos.x + 1)) + pos.f as usize
 }
 
-fn move_face(idx: u8, facing: Facing, y: usize, x: usize) -> (u8, (usize, usize), Facing) {
-
+// NOTE: Hardcoded transition values for input; will not work for all possible nets,
+// definitely will not work for example data.
+fn move_face(idx: usize, facing: Facing, y: usize, x: usize) -> (usize, (usize, usize), Facing) {
     match idx {
         0 => match facing {
             Facing::East  => (1, (y, 0), Facing::East),
             Facing::South => (2, (0, x), Facing::South),
-            Facing::West  => (3, (LENGTH - y, 0), Facing::East),
+            Facing::West  => (3, (LENGTH - 1 - y, 0), Facing::East),
             Facing::North => (5, (x, 0), Facing::East)
         },
 
         1 => match facing {
-            Facing::West =>  (0, (y, LENGTH - 1), Facing::East),
+            Facing::West =>  (0, (y, LENGTH - 1), Facing::West),
             Facing::South => (2, (x, LENGTH - 1), Facing::West),
-            Facing::East  => (4, (LENGTH - y, LENGTH), Facing::West),
-            Facing::North => (5, (LENGTH, x), Facing::South)
+            Facing::East  => (4, (LENGTH - 1 - y, LENGTH - 1), Facing::West),
+            Facing::North => (5, (LENGTH - 1, x), Facing::North)
         },
 
         2 => match facing {
@@ -221,57 +213,43 @@ fn move_face(idx: u8, facing: Facing, y: usize, x: usize) -> (u8, (usize, usize)
             Facing::East  => (4, (y, 0), Facing::East),
             Facing::South => (5, (0, x), Facing::South),
             Facing::North => (2, (x, 0), Facing::East),
-            Facing::West  => (0, (LENGTH - y, 0), Facing::East)
+            Facing::West  => (0, (LENGTH - 1 - y, 0), Facing::East)
         },
 
         4 => match facing {
             Facing::North => (2, (LENGTH - 1, x), Facing::North),
             Facing::West  => (3, (y, LENGTH - 1), Facing::West),
             Facing::South => (5, (x, LENGTH - 1), Facing::West),
-            Facing::East  => (1, (LENGTH - y, LENGTH - 1), Facing::West)
+            Facing::East  => (1, (LENGTH - 1 - y, LENGTH - 1), Facing::West)
         },
 
         5 => match facing {
             Facing::North => (3, (LENGTH - 1, x), Facing::North),
             Facing::East  => (4 ,(LENGTH - 1, y), Facing::North),
             Facing::South => (1, (0, x), Facing::South),
-            Facing::West  => (0, (0, LENGTH - x), Facing::South),
+            Facing::West  => (0, (0, y), Facing::South),
         },
-        _ => panic!()
+        _ => unreachable!()
     }
 }
 
 const LENGTH: usize = 50;
+const NET_FACES_W: usize = 3;
+const NET_FACES_H: usize = 4;
 
 fn p2(input: &str) -> usize {
-    let mut faces = vec![];
     let (map_str, password) = input.split_once("\n\n").unwrap();
     let map = &parse_map(map_str);
 
-    let (dim, (iy, ix)) = (0, get_first_open(map));
-    let pos = Position { y: iy, x: ix, f:  Facing::East };
-    let mut pos = (dim, pos);
-    let instructions = parse_password(password);
-
     let mut starts: Vec<(usize, usize)> = vec![];
-    for y in (0..(LENGTH * 3)).step_by(LENGTH) {
-        for x in (0..(LENGTH * 3)).step_by(LENGTH) {
-            if map[y][x] != Tile::Void {
-                let mut new_face = vec![];
-                for dy in y..(y + LENGTH) {
-                    let mut new_row = vec![];
-                    for dx in x..(x + LENGTH) {
-                        new_row.push(map[dy][dx])
-                    }
-                    starts.push((y, x));
-                    new_face.push(new_row);
-                }
-                faces.push(new_face);
-            }
+    for y in (0..(LENGTH * NET_FACES_H)).step_by(LENGTH) {
+        for x in (0..(LENGTH * NET_FACES_W)).step_by(LENGTH) {
+            if map[y][x] != Tile::Void { starts.push((y, x)); }
         }
     }
 
-    for instruction in instructions {
+    let mut pos = (0, Position { y: 0, x: 0, f:  Facing::East });
+    for instruction in parse_password(password) {
         match instruction {
             Instruction::TurnLeft => pos.1.f.turn_anticlockwise(),
             Instruction::TurnRight => pos.1.f.turn_clockwise(),
@@ -285,23 +263,30 @@ fn p2(input: &str) -> usize {
 
                 let try_move = move_fn(&pos.1, LENGTH, LENGTH);
                 if let Some(new_pos) = try_move {
-                    pos.1.y = new_pos.0;
-                    pos.1.x = new_pos.1;
+                    let (ny, nx) = new_pos;
+                    match map[starts[pos.0].0 + ny][starts[pos.0].1 + nx] {
+                        Tile::Open => {
+                            pos.1.y = ny;
+                            pos.1.x = nx;
+                        },
+                        Tile::Wall => continue,
+                        _ => unreachable!()
+                    }
                 } else {
                     let (nd, (ny, nx), nf) = move_face(pos.0, pos.1.f, pos.1.y, pos.1.x);
-                    pos = (nd, Position { x: nx, y: ny, f: nf });
+                    let (adj_y, adj_x) = starts[nd];
+                    match map[adj_y + ny][adj_x + nx] {
+                        Tile::Open => pos = (nd as usize, Position { x: nx, y: ny, f: nf }),
+                        Tile::Wall => continue,
+                        _ => unreachable!()
+                    }
                 }
-
             }
         }
     }
 
-    dbg!(pos);
-
-    let final_x = pos.1.x + starts[pos.0 as usize].1;
-    let final_y = pos.1.y + starts[pos.0 as usize].0;
-
-
-    (1000 * (final_y + 1)) + (4 * (final_x + 1)) + pos.1.f as usize
+    let (dim_y, dim_x) = starts[pos.0];
+    let final_x = pos.1.x + 1 + dim_x;
+    let final_y = pos.1.y + 1 + dim_y;
+    (1000 * final_y) + (4 * final_x) + pos.1.f as usize
 }
-// 32275 too low
