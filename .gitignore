@@ -7,4 +7,4 @@
 *.hi
 input/*
 .idea/
-.in
+*.in
