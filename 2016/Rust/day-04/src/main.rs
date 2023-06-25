@@ -29,9 +29,9 @@ fn process_input(lines: &str) -> u32 {
     let mut p2_done = false;
 
     for caps in re.captures_iter(lines) {
-        let mut letters = [0u8; 26];
+        // Count each letter 'a'-'z' and store these in an array.
         let enciphered = caps.get(1).unwrap().as_str();
-
+        let mut letters = [0u8; 26];
         for c in enciphered.chars() {
             if c == '-' { continue };
             letters[(c as u8 - b'a') as usize] += 1;
