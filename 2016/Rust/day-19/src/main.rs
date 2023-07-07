@@ -28,9 +28,10 @@ fn elephant(n: usize) -> usize {
 }
 
 // This function is based on problem analysis, see below.
+// The formula used here is: $n - 3^{\lfloor \log_3{n} \rfloor}$
 fn fast_opposite(n: usize) -> usize {
     let n = n as f64;
-    (((n) - (3.0f64).powf(n.log(3.0).floor()))) as usize
+    ((n) - (3.0f64).powf(n.log(3.0).floor())) as usize
 }
 
 // NOTE: The following function for Part 2 is a solution in principle, however
