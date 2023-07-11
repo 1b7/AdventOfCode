@@ -1,77 +1,111 @@
 fn main() {
     // Avoid redundant reprocessing of instructions by parsing them all first.
     let instructions = load_input();
-    let instructions: Vec<_> = instructions.lines().enumerate().map(as_instr).collect();
+    let instructions: Vec<_> = instructions.lines()
+        .map(|line| Instruction::from_str(line))
+        .collect();
 
-    println!("Part 1: {}", run(&instructions, [0; 4]));
+    let mut interpreter = Interpreter::new([0; 4], instructions);
+    interpreter.run();
+    println!("Part 1: {}", interpreter.memory[0]);
 
-    let mut mem = [0; 4];
-    mem[2] = 1;
-    println!("Part 2: {}", run(&instructions, mem));
+    interpreter.memory = [0, 0, 1, 0];
+    interpreter.ip = 0;
+    interpreter.run();
+    println!("Part 2: {}", interpreter.memory[0]);
 }
 
-fn run(instructions: &[Instr], mut mem: [isize; 4]) -> isize {
-    let mut ip = 0;
-    while ip < instructions.len() {
-        let mut jumped = false;
-        match instructions[ip] {
-            Instr::Put(a, b) => { mem[chr_to_reg(b)] = a }
-            Instr::Cpy(a, b) => { mem[chr_to_reg(b)] = mem[chr_to_reg(a)] },
-            Instr::Inc(a) => { mem[chr_to_reg(a)] += 1 },
-            Instr::Dec(a) => { mem[chr_to_reg(a)] -= 1},
-            Instr::MemJnz(a, b) => {
-                if mem[chr_to_reg(a)] != 0 {
-                    ip = b;
-                    jumped = true;
-                }
-            },
-            Instr::IntJnz(a, b) => {
-                if a != 0 {
-                    ip = b;
-                    jumped = true;
-                }
-            }
-        };
-        if !jumped { ip += 1; }
+struct Interpreter {
+    memory: [isize; 4],
+    instructions: Vec<Instruction>,
+    ip: usize
+}
+
+impl Interpreter {
+    pub fn new(memory: [isize; 4], instructions: Vec<Instruction>) -> Self {
+        Self { memory, instructions, ip: 0 }
     }
-    mem[0]
-}
 
-fn chr_to_reg(c: char) -> usize { (c as u8 - b'a') as usize }
+    fn exec(&mut self) {
+        let as_reg = |n| (n as u8 - b'a') as usize;
+        
+        let mut jumped = false;
+        let inst = self.instructions[self.ip];
+        match inst.opcode {
+            Opcode::Cpy => {
+                self.memory[as_reg(inst.ops[1])] = match inst.mode {
+                    Mode::Direct => inst.ops[0],
+                    Mode::Register => self.memory[as_reg(inst.ops[0])]
+                };
+            },
+            Opcode::Inc => self.memory[as_reg(inst.ops[0])] += 1,
+            Opcode::Dec => self.memory[as_reg(inst.ops[0])] -= 1,
+            Opcode::Jnz => {
+                let cmp = match inst.mode {
+                    Mode::Direct => inst.ops[0],
+                    Mode::Register => self.memory[as_reg(inst.ops[0])]
+                };
 
-fn as_instr(s: (usize, &str)) -> Instr {
-    let base = s.0;
-    let words: Vec<_> = s.1.split_whitespace().collect();
-    match words[0] {
-        "cpy" => {
-            if let Ok(n) = words[1].parse() {
-                Instr::Put(n, words[2].chars().next().unwrap())
-            } else {
-                Instr::Cpy(words[1].chars().next().unwrap(), words[2].chars().next().unwrap())
-            }
-        },
-        "inc" => Instr::Inc(words[1].chars().next().unwrap()),
-        "dec" => Instr::Dec(words[1].chars().next().unwrap()),
-        "jnz" => {
-            if let Ok(n) = words[1].parse::<usize>() {
-                Instr::IntJnz(words[1].parse().unwrap(), (base as isize + words[2].parse::<isize>().unwrap()) as usize)
-            } else {
-                Instr::MemJnz(words[1].chars().next().unwrap(), (base as isize + words[2].parse::<isize>().unwrap()) as usize)
+                if cmp != 0 {
+                    self.ip = ((self.ip as isize) + inst.ops[1]) as usize;
+                    jumped = true;
+                }
             }
         }
-        _ => panic!("Unrecognised Instruction")
+
+        if !jumped { self.ip += 1; }
+    }
+
+    pub fn run(&mut self) {
+        while self.ip < self.instructions.len() { self.exec(); }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Instr {
-    Put(isize, char),
-    Cpy(char, char),
-    Inc(char),
-    Dec(char),
-    MemJnz(char, usize),
-    IntJnz(usize, usize)
+struct Instruction {
+    opcode: Opcode,
+    mode: Mode,
+    ops: [isize; 2]
 }
+
+impl Instruction {
+    pub fn new(opcode: Opcode, mode: Mode, ops: [isize; 2]) -> Self {
+        Self { opcode, mode, ops }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        let words: Vec<_> = s.split_whitespace().collect();
+        let op = words[1].chars().next().unwrap();
+        match words[0] {
+            "cpy" => {
+                let register = words[2].chars().next().unwrap() as isize;
+                if let Ok(n) = words[1].parse() {
+                    Instruction::new(Opcode::Cpy, Mode::Direct, [n, register])
+                } else {
+                    Instruction::new(Opcode::Cpy, Mode::Register, [op as isize, register])
+                }
+            },
+            "inc" => Instruction::new(Opcode::Inc, Mode::Register, [op as isize, 0]),
+            "dec" => Instruction::new(Opcode::Dec, Mode::Register, [op as isize, 0]),
+            "jnz" => {
+                let destination = words[2].parse().unwrap();
+                if let Ok(n) = words[1].parse() {
+                    Instruction::new(Opcode::Jnz, Mode::Direct, [n, destination])
+                } else {
+                    Instruction::new(Opcode::Jnz, Mode::Register, [op as isize, destination])
+                }
+            },
+            // "tgl" => Instr::Toggle(words[1].parse().unwrap()),
+            _ => panic!("Unrecognised Instruction")
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Mode { Register, Direct }
+
+#[derive(Debug, Clone, Copy)]
+enum Opcode { Cpy, Inc, Dec, Jnz }
 
 fn load_input() -> String {
     std::fs::read_to_string(
