@@ -47,7 +47,7 @@ fn p2(cards: &Vec<(Vec<u8>, Vec<u8>)>) -> u32 {
         new_len += n;
 
         let matches = card_matches(&card) as usize;
-        for m in 0..=matches { cards[i + m].1 += n;  }
+        for m in 1..=matches { cards[i + m].1 += n;  }
     }
     new_len
 }
