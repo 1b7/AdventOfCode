@@ -1,5 +1,7 @@
 use std::{collections::HashSet, time::Instant};
 
+use rayon::prelude::*;
+
 fn main() {
     let s = include_str!("../../../input/16");
 
@@ -13,30 +15,17 @@ fn main() {
     println!("Part 1: {p1} ({e}us)");
     let t = Instant::now();
 
-    let mut m = 0;
-    
-    let top_row =   (0, 0..grid[0].len(), Direction::Down);
-    for col in top_row.1 {
-        m = m.max(simulate(((top_row.0, col as i32), top_row.2), &grid));
-    }
+    let lr = 0..grid[0].len();
+    let tb = 0..grid.len();
+    let tests = lr.clone().map(|c| ((0, c as i32), Direction::Down))
+        .chain( lr.map(|c| (((grid.len() - 1 )as i32, c as i32), Direction::Up)))
+        .chain( tb.clone().map(|r| ((r as i32, 0), Direction::Right)))
+        .chain( tb.map(|r| ((r as i32, grid[0].len() as i32 - 1), Direction::Left)));
 
-    let bot_row =   (grid.len() - 1, 0..grid[0].len(), Direction::Up);
-    for col in bot_row.1 {
-        m = m.max(simulate(((bot_row.0 as i32, col as i32), bot_row.2), &grid));
-    }
-    
-    let left_col =  (0..grid.len(), 0, Direction::Right);
-    for row in left_col.0 {
-        m = m.max(simulate(((row as i32, left_col.1 as i32), left_col.2), &grid));
-    }
-
-    let right_col = (0..grid.len(), grid[0].len(), Direction::Left);
-    for row in right_col.0 {
-        m = m.max(simulate(((row as i32, right_col.1 as i32), right_col.2), &grid));
-    }
+    let p2 = tests.par_bridge().map(|beam| simulate(beam, &grid)).max().unwrap();
 
     let e = t.elapsed().as_micros();
-    println!("Part 2: {m} ({e}us)");
+    println!("Part 2: {p2} ({e}us)");
 
 }
 
