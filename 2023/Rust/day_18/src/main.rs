@@ -63,6 +63,8 @@ fn poly_area(poly: &[(i32, i32)]) -> BigInt {
     area(&poly) + ((perimeter(&poly)/ 2) + 1)
 }
 
+// Algorithm for the area of a polygon from:
+// https://web.archive.org/web/20100405070507/http://valis.cs.uiuc.edu/~sariel/research/CG/compgeom/msg00831.html
 fn area(coords: &[(i32, i32)]) -> BigInt {
     let mut area = 0.to_bigint().unwrap();
     for i in 0..coords.len() {
