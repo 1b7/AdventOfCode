@@ -93,7 +93,7 @@ fn p1(wfs: &HashMap<&str, Vec<(&str, Cmp, &str)>>, pts: &[Part]) -> usize {
 
 fn parse_input(s: &str) -> (HashMap<&str, Vec<(&str, Cmp, &str)>>, Vec<Part>) {
     fn parse_rule(rule: &str) -> (&str, Cmp, &str) {
-        if !rule.contains(":") { return ("x", Cmp::Pass, r) }
+        if !rule.contains(":") { return ("x", Cmp::Pass, rule) }
     
         let (condition, target) = rule.split_once(':').unwrap();
         let (metric, n) = condition.split_once(['<', '>']).unwrap();
