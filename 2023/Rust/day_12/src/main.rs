@@ -1,4 +1,6 @@
-use std::{time::Instant, fmt::Display};
+use std::{time::Instant, fmt::Display, collections::HashMap};
+
+use quick_cache::unsync::Cache;
 
 use rayon::prelude::*;
 
@@ -18,8 +20,10 @@ fn main() {
 
     let input = unfold(input.clone());
 
-    let sum = input.iter().map(|(line, seqs)| { 
-        dbg!(placements(line, seqs))
+    let sum = input.iter().enumerate().map(|(i, (line, seqs))| { 
+        let result = placements(line, seqs);
+        println!("{i:4}: {result}");
+        result
     }).sum::<usize>();
     
     println!("{sum}");
@@ -68,9 +72,22 @@ fn placements(line: &[Option<Spring>], seqs: &[u8]) -> usize {
         let w_end = i + s - 1;
         if w_end + 1 < line.len() &&  line[w_end + 1] == Some(Spring::Damaged) { continue }
         if w.iter().all(|&c| c == None || c == Some(Spring::Damaged)) {
-            starts.push(vec![i]);
+            starts.push(1u128 << i);
         }
     }
+
+    // Convert a u128 back to a set of indices.
+    const N_BITS: usize = 128;
+    let bits_to_vec = |n: &u128| -> Vec<usize> {
+        (0..N_BITS).filter(|i| (n & (1 << i)) > 0).collect()
+    };
+
+    let pprint = |v: &[u128]| {
+        format!("{:?}", v.clone().iter().map(bits_to_vec).collect::<Vec<_>>())
+    };
+
+    // let mut cache: HashMap<(usize, usize), Vec<u128>> = HashMap::new();
+    let mut cache: Cache<(usize, usize), Vec<u128>> = Cache::new(100_000);
 
     // Now iteratively search for valid placements of blocks.
     let empty = vec![];
@@ -78,38 +95,45 @@ fn placements(line: &[Option<Spring>], seqs: &[u8]) -> usize {
         let mut saved = vec![];
         let s = seqs[seq_idx] as usize;
 
-        for placement_set in &starts {
-            let st = placement_set[placement_set.len() - 1] + seqs[seq_idx - 1] as usize;
+        for &placement_set in &starts {
+            let placement_vec = bits_to_vec(&placement_set);
+            let st = placement_vec[placement_vec.len() - 1] + seqs[seq_idx - 1] as usize;
 
-            // Find the first relevant block to the current window.
-            let fst = (0..blocks.len()).find(|&i| blocks[i].0 >= st);
-            let blocks = if let Some(f) = fst { &blocks[f..] } else { &empty };
-            
-            'window: 
-            for (i, w) in line.windows(s).enumerate() {
-                if i <= st { continue }
-                if blocks.len() > 0 && i > blocks[0].0 { break }
-                let w_end = i + s - 1;
-                if w_end + 1 < line.len() && line[w_end + 1] == Some(Spring::Damaged) { continue }
-
-                // Is there an overlap with a block that isn't fully consumed?
-                // Is there an overlap:
-                //   Start OR End is within the block.
-                // Is it fully consumed:
-                //   Starts before and Ends at or After,
-                for &(l, r) in blocks {
-                    let overlap = (i >= l && i <= r) || (w_end >= l && w_end <= r);
-                    let consumed = i <= l && w_end >= r;
-                    if overlap && !consumed { continue 'window }
+            let mut this_placement: Vec<u128> = vec![];
+            if let Some(result) = cache.get(&(st, s)) {
+                this_placement = result.to_owned();
+            } else {
+                // Find the first relevant block to the current window.
+                let fst = (0..blocks.len()).find(|&i| blocks[i].0 >= st);
+                let blocks = if let Some(f) = fst { &blocks[f..] } else { &empty };
+                
+                'window:
+                for (i, w) in line.windows(s).enumerate() {
+                    if i <= st { continue }
+                    if blocks.len() > 0 && i > blocks[0].0 { break }
+                    let w_end = i + s - 1;
+                    if w_end + 1 < line.len() && line[w_end + 1] == Some(Spring::Damaged) { continue }
+    
+                    // Is there an overlap with a block that isn't fully consumed?
+                    // Is there an overlap:
+                    //   Start OR End is within the block.
+                    // Is it fully consumed:
+                    //   Starts before and Ends at or After,
+                    for &(l, r) in blocks {
+                        let overlap = (i >= l && i <= r) || (w_end >= l && w_end <= r);
+                        let consumed = i <= l && w_end >= r;
+                        if overlap && !consumed { continue 'window }
+                    }
+    
+                    if w.iter().all(|&c| c == None || c == Some(Spring::Damaged)) {
+                        this_placement.push(placement_set | (1 << i));
+                    }
                 }
-
-                if w.iter().all(|&c| c == None || c == Some(Spring::Damaged)) {
-                    let mut new_p = placement_set.clone();
-                    new_p.push(i);
-                    saved.push(new_p);
-                }
+                cache.insert((st, s), this_placement.clone());
             }
+            saved.extend(this_placement);
         }
+        dbg!(saved.len());
         starts = saved;
     }
 
@@ -117,7 +141,7 @@ fn placements(line: &[Option<Spring>], seqs: &[u8]) -> usize {
     let last_block = blocks[blocks.len() - 1];
     let mut count = 0;
     for placement in &starts {
-        let end_idx = placement[placement.len() - 1] + seqs[seqs.len() - 1] as usize - 1;
+        let end_idx = ((N_BITS - 1) - placement.leading_zeros() as usize) + seqs[seqs.len() - 1] as usize - 1;
         if last_block.1 < usize::MAX && end_idx < last_block.1 { continue }
         count += 1;
     }
