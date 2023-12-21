@@ -14,20 +14,115 @@ fn main() {
         .map(parse_line)
         .collect::<Vec<_>>();
 
-    // let input = unfold(input.clone());
+    // rayon::ThreadPoolBuilder::new().num_threads(4).build_global().unwrap();
 
-    // Naive approach, try every possible combination and check for validity.
-    let t_s = Instant::now();
-    let valid_arranges: usize = input.par_iter()
-        .enumerate()
-        .map(|(i, (springs, seq))| {
-            // let r = permutations(&springs, &seq);
-            // println!("Processed {}: {} ({}s)", i, r, t_s.elapsed().as_secs());
-            permutations(&springs, &seq)
-        })
-        .sum();
+    let input = unfold(input.clone());
 
-    println!("{} {}", valid_arranges, t_s.elapsed().as_secs());
+    let sum = input.iter().map(|(line, seqs)| { 
+        dbg!(placements(line, seqs))
+    }).sum::<usize>();
+    
+    println!("{sum}");
+}
+
+fn to_str(line: &[Option<Spring>]) -> String {
+    line.iter().map(|&x| match x {
+        None => '?',
+        Some(Spring::Damaged) => '#',
+        Some(Spring::Operational) => '.'
+    }).collect()
+}
+
+fn placements(line: &[Option<Spring>], seqs: &[u8]) -> usize {
+    // Try to identify all possible starting points for the first sequence,
+    // then all starting points from *those* starting points,
+    // and so on.
+
+    // Utility function to find the blocks (as pairs of indices) of fixed damaged springs.
+    let find_damaged = |from: usize| -> Vec<(usize, usize)> {
+        let mut start = usize::MAX;
+        let mut end = usize::MAX;
+        let mut pairs = vec![];
+        for i in from..line.len() {
+            if line[i] == Some(Spring::Damaged) && start > line.len() {
+                start = i;
+                end = i;
+            } else if line[i] != Some(Spring::Damaged) && start < line.len() {
+                end = i - 1;
+                pairs.push((start, end));
+                start = usize::MAX;
+                end = usize::MAX;
+            }
+        }
+        if pairs.len() == 0 || start < usize::MAX  { pairs.push((start, end)) }
+        pairs
+    };
+
+    // Initialise the starting points:
+    let s = seqs[0] as usize;
+    let mut starts = vec![];
+    let blocks = find_damaged(0);
+    let (stop_l, _) = blocks[0];
+    for (i, w) in line.windows(s).enumerate() {
+        if i > stop_l { break }
+        let w_end = i + s - 1;
+        if w_end + 1 < line.len() &&  line[w_end + 1] == Some(Spring::Damaged) { continue }
+        if w.iter().all(|&c| c == None || c == Some(Spring::Damaged)) {
+            starts.push(vec![i]);
+        }
+    }
+
+    // Now iteratively search for valid placements of blocks.
+    let empty = vec![];
+    for seq_idx in 1..seqs.len() {
+        let mut saved = vec![];
+        let s = seqs[seq_idx] as usize;
+
+        for placement_set in &starts {
+            let st = placement_set[placement_set.len() - 1] + seqs[seq_idx - 1] as usize;
+
+            // Find the first relevant block to the current window.
+            let fst = (0..blocks.len()).find(|&i| blocks[i].0 >= st);
+            let blocks = if let Some(f) = fst { &blocks[f..] } else { &empty };
+            
+            'window: 
+            for (i, w) in line.windows(s).enumerate() {
+                if i <= st { continue }
+                if blocks.len() > 0 && i > blocks[0].0 { break }
+                let w_end = i + s - 1;
+                if w_end + 1 < line.len() && line[w_end + 1] == Some(Spring::Damaged) { continue }
+
+                // Is there an overlap with a block that isn't fully consumed?
+                // Is there an overlap:
+                //   Start OR End is within the block.
+                // Is it fully consumed:
+                //   Starts before and Ends at or After,
+                for &(l, r) in blocks {
+                    let overlap = (i >= l && i <= r) || (w_end >= l && w_end <= r);
+                    let consumed = i <= l && w_end >= r;
+                    if overlap && !consumed { continue 'window }
+                }
+
+                if w.iter().all(|&c| c == None || c == Some(Spring::Damaged)) {
+                    let mut new_p = placement_set.clone();
+                    new_p.push(i);
+                    saved.push(new_p);
+                }
+            }
+        }
+        starts = saved;
+    }
+
+    // Check that there aren't any blocks of damaged springs past the end of our placements:
+    let last_block = blocks[blocks.len() - 1];
+    let mut count = 0;
+    for placement in &starts {
+        let end_idx = placement[placement.len() - 1] + seqs[seqs.len() - 1] as usize - 1;
+        if last_block.1 < usize::MAX && end_idx < last_block.1 { continue }
+        count += 1;
+    }
+
+    count
 }
 
 fn unfold(input: Vec<(Vec<Option<Spring>>, Vec<u8>)>) -> Vec<(Vec<Option<Spring>>, Vec<u8>)> {
@@ -43,122 +138,18 @@ fn unfold(input: Vec<(Vec<Option<Spring>>, Vec<u8>)>) -> Vec<(Vec<Option<Spring>
     }).collect()
 }
 
-fn valid_line(b: &BinaryStack, expect: &[u8], strict: bool) -> bool {
-    let mut bseq = b.as_seq();
-    bseq.reverse();
-    if strict { return bseq == expect }
-
-    if bseq.len() > expect.len() { return false }
-    for i in 0..(bseq.len() - 1) {
-        if bseq[i] != expect[i] { return false }
-    }
-    bseq[bseq.len() - 1] <= expect[bseq.len() - 1]
-}
-
-fn permutations(line: &Vec<Option<Spring>>, seqs: &[u8]) -> usize {
-    let mut buf: [Vec<BinaryStack>; 2] = [vec![BinaryStack::new(0)], vec![]];
-    let mut toggle = 0;
-
-    for spring in line {
-        if spring.is_some() {
-            if spring.unwrap() == Spring::Operational {
-                for b in &mut buf[toggle] { b.push_zero(); }
-            } else {
-                for b in &mut buf[toggle] { b.push_one(); }
-            }
-            continue;
-        }
-
-        buf[(toggle + 1) % 2] = vec![];
-
-        let ops = [BinaryStack::push_one, BinaryStack::push_zero];
-        for stack in buf[toggle].clone() {
-            for op in ops {
-                let mut x = stack.clone();
-                op(&mut x);
-                if valid_line(&x, seqs, false) {
-                    buf[(toggle + 1) % 2].push(x);
-                }
-            }
-        }
-        toggle = (toggle + 1) % 2;
-    }
-
-    buf[toggle].clone().into_iter().filter(|&l| {
-        valid_line(&l, seqs, true)
-    }).count()
-}
-
 fn parse_line(s: &str) -> (Vec<Option<Spring>>, Vec<u8>) {
     let (springs, seqs) = s.split_once(' ').unwrap();
-    let springs = springs.chars().map(|c| match c {
-        '#' => Some(Spring::Damaged),
-        '.' => Some(Spring::Operational),
-         _  => None
-    }).collect();
+    let springs = springs.chars()
+        .map(|c| match c {
+            '#' => Some(Spring::Damaged),
+            '.' => Some(Spring::Operational),
+            _  => None
+        }).collect();
 
     let seqs = seqs.split(',').map(|n| n.parse().unwrap()).collect();
-
     (springs, seqs)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Spring { Operational, Damaged }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct BinaryStack(u128);
-
-impl BinaryStack {
-    pub fn new(x: u128) -> Self { Self(x) }
-
-    pub fn from_springs(springs: &[Spring]) -> Self {
-        let mut out = 0;
-        for s in springs.iter().rev() {
-            match s {
-                Spring::Damaged     => { out <<= 1; out |= 1;}
-                Spring::Operational => { out <<= 1; }
-            }
-        }
-        BinaryStack(out)
-    }
-
-    pub fn to_springs(&self, mut len: usize) -> Vec<Spring> {
-        let mut out = vec![];
-        let mut n = self.0;
-        while len > 0 {
-            let x = n & 1;
-            n >>= 1;
-            match x {
-                1 => { out.push(Spring::Damaged) },
-                0 => { out.push(Spring::Operational) },
-                _ => unreachable!()
-            };
-            len -= 1;
-        }
-        out.reverse();
-        out
-    }
-
-    pub fn as_seq(&self) -> Vec<u8> {
-        let mut x = self.0;
-        let mut out = vec![];
-        let mut block = 0;
-        while x > 0 {
-            if x & 1 == 1 { block += 1 }
-            else if block > 0  { out.push(block); block = 0 }
-            x >>= 1;
-        }
-        if out.len() == 0 || block > 0 { out.push(block); }
-        out
-    }
-
-    pub fn push_one(&mut self) { self.0 = (self.0 << 1) | 1; }
-    pub fn push_zero(&mut self) { self.0 <<= 1; }
-
-}
-
-impl Display for BinaryStack {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:0128b}", self.0)
-    }
-}
