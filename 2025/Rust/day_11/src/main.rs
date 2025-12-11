@@ -18,9 +18,9 @@ fn main() {
             * path_to(&graph, "fft", "dac")
             * path_to(&graph, "dac", "out")
     ) + (
-        path_to(&graph, "svr", "fft")
+        path_to(&graph, "svr", "dac")
             * path_to(&graph, "dac", "fft")
-            * path_to(&graph, "dac", "out")
+            * path_to(&graph, "fft", "out")
     );
 
     println!("Part 1: {p1}");
