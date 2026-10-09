@@ -17,7 +17,8 @@ public class Main {
     System.out.println(result2);
   }
 
-  private static final String FILE_PATH_TEMPLATE = "C:/Users/Luke/Dev/AdventOfCode/Java/AdventOfCode/src/main/resources/inputs/%02d";
+  private static final String FILE_PATH_TEMPLATE = System.getProperty("user.home")
+      + "/Dev/AdventOfCode/Java/AdventOfCode/src/test/resources/sample_inputs/%02d";
 
   public static String getInputAsString(int day) {
     Path path = Path.of(FILE_PATH_TEMPLATE.formatted(day));
